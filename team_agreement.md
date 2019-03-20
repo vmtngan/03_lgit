@@ -5,12 +5,12 @@
 3. We will check-in with each others' progress: _twice a day_
 
 4. About each team member:
-__Anh Bui__
-  * Strengths:
-  * Weaknesses:
-__Ngan Vuong__
-  * Strengths:
-  * Weaknesses:
+* __Anh Bui__
+  - Strengths:
+  - Weaknesses:
+* __Ngan Vuong__
+  - Strengths:
+  - Weaknesses:
 
 5. Workload allocation:
 -

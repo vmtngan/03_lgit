@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 import os
 import sys
 from hashlib import sha1
+from datetime import datetime
 
 
 def parse_arguments():
@@ -113,23 +114,26 @@ def execute_lgit_init():
         init_lgit_dir()
 
 
-def check_empty_files(add_list):
+def check_empty_files(list, cmd):
     """
     Check if the list of files to add is empty or not.
+
+    @param list:(list of str) The file list.
+    @param cmd: (str) The command.
 
     @return: (bool) True - no empty.
                     False - empty.
     """
-    if not add_list:
+    if not list:
         print("Nothing specified, nothing added." +
-            "\nMaybe you wanted to say 'git add .'?")
+            "\nMaybe you wanted to say 'git " + cmd + " .'?")
         return False
     return True
 
 
 def print_permission_error(file):
-    print('error: open("%s"): Permission denied' % file)
-    print('error: unable to index file %s' % file)
+    print('error: open("' + file + '"): Permission denied')
+    print('error: unable to index file ' + file)
     print('fatal: adding files failed')
 
 
@@ -155,16 +159,77 @@ def hash_sha1(content):
     return sha1(content).hexdigest()
 
 
-def add(filename):
+def create_file(cryp, content):
+    """
+    Create the file in objects directory.
+
+    @param cryp: (str) SHA1 cryptography of the content.
+    @param content: (str) The file content.
+    """
+    if not os.path.exists('.lgit/objects/' + cryp[:2]):
+        os.mkdir('.lgit/objects/' + cryp[:2])
+    file = os.open('.lgit/objects/' + cryp[:2] + '/' + cryp[2:],
+        os.O_RDWR | os.O_CREAT)
+    os.write(file, content)
+    os.close(file)
+
+
+def get_timestamp(filename):
+    """
+    Get timestamp of the file.
+
+    @param filename: (str) The file name.
+    """
+    m_time = os.path.getmtime(filename)
+    timestamp = datetime.fromtimestamp(m_time)
+    return timestamp.strftime('%Y%m%d%H%M%S')
+
+
+def get_start_pos(filename):
+    """
+    Get the starting position to write the file.
+
+    @param filename: (str) The file name.
+
+    @return: (int) The starting position.
+    """
+    start = 0
+    with open('.lgit/index', 'r') as file:
+        for line in file:
+            if filename in line:
+                break
+            start += len(line)
+    return start
+
+
+def update_index(cryp, filename):
+    """
+    Update file information in the index file.
+
+    @param cryp: (str) SHA1 cryptography of the content.
+    @param filename: (str) The file name.
+    """
+    index_file = os.open('.lgit/index', os.O_RDWR)
+    os.lseek(index_file, get_start_pos(filename), 0)
+    os.write(index_file, str.encode('{} {} {} {} {}\n'.format(
+        get_timestamp(filename),
+        cryp,
+        cryp,
+        ' ' * len(cryp),
+        filename)))
+    os.close(index_file)
+
+
+def add(filename, content):
     """
     Make a copy of file content and save it in .lgit database.
-    Update file information in the index file.
 
     @param filename: (str) The file name.
     @param exist: (bool) True - file exists.
                         False - file does not exist.
     """
-    print(filename)
+    create_file(hash_sha1(content), content)
+    update_index(hash_sha1(content), filename)
 
 
 def lgit_add(filename):
@@ -172,29 +237,59 @@ def lgit_add(filename):
     Lgit add.
 
     @param filename: (str) The file name.
-    @param exist: (bool) True - file exists.
-                        False - file does not exist.
     """
     try:
         file = os.open(filename, os.O_RDONLY)
         content = os.read(file, os.stat(file).st_size)
     except PermissionError:
         print_permission_error(filename)
-    add(filename)
+    add(filename, content)
     os.close(file)
 
 
 def execute_lgit_add(add_list):
     for item in add_list:
         if os.path.exists(item):
-            if os.path.isfile(item):
-                lgit_add(item)
-            elif os.path.isdir(item):
+            if os.path.isdir(item):
                 sub_list = get_sub_files_dir(item)
                 execute_lgit_add(sub_list)
+            elif os.path.isfile(item):
+                lgit_add(item)
         elif os.getcwd() not in item:
-            print("fatal: %s '%s' is outside " +
-                "repository" % (item, item))
+            print("fatal: " + item + " '" + item +
+                "' is outside repository")
+        else:
+            print("fatal: pathspec '" + item +
+                "' did not match any files")
+
+
+def get_added_index_list():
+    """
+    Get the list of files added to the index file.
+
+    @return: (list of str)
+    """
+    added_list = []
+    with open('.lgit/index', 'r') as file:
+        for line in file:
+            added_list.append(line.split()[-1])
+    return added_list
+
+
+def lgit_rm(filename):
+    """
+    Lgit remove.
+
+    @param filename: (str) The file name.
+    """
+    if os.path.exists(filename):
+        os.unlink(filename)
+
+
+def execute_lgit_rm(rm_list):
+    for item in rm_list:
+        if item in get_added_index_list():
+            lgit_rm(item)
         else:
             print("fatal: pathspec '" + item +
                 "' did not match any files")
@@ -207,10 +302,11 @@ def main():
         if args.command == 'init':
             execute_lgit_init()
         elif args.command == 'add':
-            if check_empty_files(args.files):
+            if check_empty_files(args.files, args.command):
                 execute_lgit_add(args.files)
         elif args.command == 'rm':
-            execute_lgit_rm()
+            if check_empty_files(args.files, args.command):
+                execute_lgit_rm(args.files)
         elif args.command == 'config':
             execute_lgit_config()
         elif args.command == 'commit':
