@@ -196,20 +196,21 @@ def get_start_pos(filename):
     start = 0
     with open('.lgit/index', 'r') as file:
         for line in file:
-            if filename in line:
+            if filename in line.split():
                 break
             start += len(line)
     return start
 
 
-def update_index(cryp, filename):
+def update_index_add(cryp, filename):
     """
-    Update file information in the index file.
+    Update file information in the index file (add).
 
     @param cryp: (str) SHA1 cryptography of the content.
     @param filename: (str) The file name.
     """
     index_file = os.open('.lgit/index', os.O_RDWR)
+    print(filename, get_start_pos(filename))
     os.lseek(index_file, get_start_pos(filename), 0)
     os.write(index_file, str.encode('{} {} {} {} {}\n'.format(
         get_timestamp(filename),
@@ -229,7 +230,7 @@ def add(filename, content):
                         False - file does not exist.
     """
     create_file(hash_sha1(content), content)
-    update_index(hash_sha1(content), filename)
+    update_index_add(hash_sha1(content), filename)
 
 
 def lgit_add(filename):
@@ -250,11 +251,11 @@ def lgit_add(filename):
 def execute_lgit_add(add_list):
     for item in add_list:
         if os.path.exists(item):
-            if os.path.isdir(item):
+            if os.path.isfile(item):
+                lgit_add(item)
+            elif os.path.isdir(item):
                 sub_list = get_sub_files_dir(item)
                 execute_lgit_add(sub_list)
-            elif os.path.isfile(item):
-                lgit_add(item)
         elif os.getcwd() not in item:
             print("fatal: " + item + " '" + item +
                 "' is outside repository")
@@ -263,33 +264,53 @@ def execute_lgit_add(add_list):
                 "' did not match any files")
 
 
-def get_added_index_list():
+def get_dict_index_content():
     """
-    Get the list of files added to the index file.
+    Get the list of tracked files.
 
-    @return: (list of str)
+    @return: (dict) The list of tracked files.
     """
-    added_list = []
+    tracked = {}
     with open('.lgit/index', 'r') as file:
         for line in file:
-            added_list.append(line.split()[-1])
-    return added_list
+            filename = line.split()[-1]
+            tracked[filename] = line
+    return tracked
 
 
-def lgit_rm(filename):
+def update_index_rm(filename, tracked):
+    """
+    Update file information in the index file (rm).
+
+    @param filename: (str) The file name.
+    @param tracked: (dict) The list of tracked files.
+    """
+    if filename in tracked:
+        del tracked[filename]
+    with open('.lgit/index', 'w') as file:
+        file.write(''.join(tracked.values()))
+
+
+def lgit_rm(filename, tracked):
     """
     Lgit remove.
 
     @param filename: (str) The file name.
+    @param tracked: (dict) The list of tracked files.
     """
     if os.path.exists(filename):
         os.unlink(filename)
+    update_index_rm(filename, tracked)
 
 
 def execute_lgit_rm(rm_list):
+    tracked = get_dict_index_content()
     for item in rm_list:
-        if item in get_added_index_list():
-            lgit_rm(item)
+        if os.path.isfile(item):
+            lgit_rm(item, tracked)
+        elif os.path.isdir(item):
+            sub_list = get_sub_files_dir(item)
+            execute_lgit_rm(sub_list)
         else:
             print("fatal: pathspec '" + item +
                 "' did not match any files")
