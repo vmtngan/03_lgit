@@ -12,13 +12,22 @@ def parse_arguments():
 
     @return: (namespace) An object to take the attributes.
     """
-    parser = ArgumentParser(prog='lgit',
+    parser = ArgumentParser(
+        usage='./lgit.py <command> [<args>]',
         description='A lightweight version of git')
-    parser.add_argument('command',
-        help='specify which command to execute among ' +
-        '[init|add|rm|config|commit|status|log|ls-files]')
-    parser.add_argument('files', nargs='*',
-        help='name of files to add content to the index')
+    subparsers = parser.add_subparsers(dest='command')
+    init_parser = subparsers.add_parser('init')
+    add_parser = subparsers.add_parser('add')
+    add_parser.add_argument('files', nargs='+')
+    remove_parser = subparsers.add_parser('rm')
+    remove_parser.add_argument('files', nargs='+')
+    commit_parser = subparsers.add_parser('commit')
+    commit_parser.add_argument('-m', dest='message', nargs=1, required=True)
+    log_parser = subparsers.add_parser('log')
+    config_parser = subparsers.add_parser('config')
+    config_parser.add_argument('--author', nargs=1, required=True)
+    list_files_parser = subparsers.add_parser('ls-files')
+    status_parser = subparsers.add_parser('status')
     return parser.parse_args()
 
 
@@ -48,7 +57,8 @@ def have_command_error(command):
                     False - no error.
     """
     if command != 'init' and not contain_lgit_dir():
-        print('fatal: not a git repository ' +
+        print(
+            'fatal: not a git repository ' +
             '(or any of the parent directories)')
         return True
     return False
@@ -110,6 +120,12 @@ def check_exist_lgit_dir():
 
 
 def execute_lgit_init():
+    """
+    Initialise version control in the current directory.
+
+    Until this has been done,
+    any lgit command should return a fatal error.
+    """
     if not check_exist_lgit_dir():
         init_lgit_dir()
 
@@ -125,7 +141,8 @@ def check_empty_files(list, cmd):
                     False - empty.
     """
     if not list:
-        print("Nothing specified, nothing added." +
+        print(
+            "Nothing specified, nothing added." +
             "\nMaybe you wanted to say 'git " + cmd + " .'?")
         return False
     return True
@@ -168,7 +185,8 @@ def create_file(cryp, content):
     """
     if not os.path.exists('.lgit/objects/' + cryp[:2]):
         os.mkdir('.lgit/objects/' + cryp[:2])
-    file = os.open('.lgit/objects/' + cryp[:2] + '/' + cryp[2:],
+    file = os.open(
+        '.lgit/objects/' + cryp[:2] + '/' + cryp[2:],
         os.O_RDWR | os.O_CREAT)
     os.write(file, content)
     os.close(file)
@@ -211,12 +229,14 @@ def update_index_add(cryp, filename):
     """
     index_file = os.open('.lgit/index', os.O_RDWR)
     os.lseek(index_file, get_start_pos(filename), 0)
-    os.write(index_file, str.encode('{} {} {} {} {}\n'.format(
-        get_timestamp(filename),
-        cryp,
-        cryp,
-        ' ' * len(cryp),
-        filename)))
+    os.write(
+        index_file,
+        str.encode('{} {} {} {} {}\n'.format(
+            get_timestamp(filename),
+            cryp,
+            cryp,
+            ' ' * 40,
+            filename)))
     os.close(index_file)
 
 
@@ -234,7 +254,7 @@ def add(filename, content):
 
 def lgit_add(filename):
     """
-    Lgit add.
+    Change stage.
 
     @param filename: (str) The file name.
     """
@@ -256,10 +276,12 @@ def execute_lgit_add(add_list):
                 sub_list = get_sub_files_dir(item)
                 execute_lgit_add(sub_list)
         elif os.getcwd() not in item:
-            print("fatal: " + item + " '" + item +
+            print(
+                "fatal: " + item + " '" + item +
                 "' is outside repository")
         else:
-            print("fatal: pathspec '" + item +
+            print(
+                "fatal: pathspec '" + item +
                 "' did not match any files")
 
 
@@ -303,6 +325,12 @@ def lgit_rm(filename, tracked):
 
 
 def execute_lgit_rm(rm_list):
+    """
+    Remove a file from the working directory
+    and the index.
+
+    @param rm_list: (list of str) List of files to remove.
+    """
     tracked = get_dict_index_content()
     for item in rm_list:
         if os.path.isfile(item):
@@ -311,27 +339,66 @@ def execute_lgit_rm(rm_list):
             sub_list = get_sub_files_dir(item)
             execute_lgit_rm(sub_list)
         else:
-            print("fatal: pathspec '" + item +
+            print(
+                "fatal: pathspec '" + item +
                 "' did not match any files")
 
 
 def execute_lgit_config(name):
-    """Write author name to the config file."""
+    """
+    Set a user for authoring the commits.
+    Write author name to the config file.
+    """
     config_file = open('.lgit/config', 'w+')
     config_file.write(name + '\n')
     config_file.close()
 
 
 def execute_lgit_lsfiles():
+    """
+    Display all the files currently tracked in the index,
+    relative to the current directory
+    """
     sub_list = get_sub_files_dir('.')
     for file in sorted(get_dict_index_content().keys()):
         if './' + file in sub_list:
             print(file)
 
 
+def execute_lgit_commit(message):
+    print(message)
+
+
+def print_commit_history(filename, time):
+    with open('.lgit/commits/' + filename, 'r') as file:
+        content = file.read().split('\n')
+        print('commit ' + filename)
+        print('Author: ' + content[0])
+        print('Date: ' + time)
+        print('\n\t' + content[-1])
+
+
+def execute_lgit_log():
+    """Show the commit history."""
+    cmt_list = sorted(os.listdir('.lgit/commits'), reverse=True)
+    for item in cmt_list:
+        dt = datetime(
+            year=int(item[0:4]),
+            month=int(item[4:6]),
+            day=int(item[6:8]),
+            hour=int(item[8:10]),
+            minute=int(item[10:12]),
+            second=int(item[12:14]))
+        time = dt.strftime('%a %b %d %H:%M:%S %Y')
+        print_commit_history(item, time)
+        if item in list[:-1]:
+            print('\n')
+
+
 def main():
     """Run the main program."""
     args = parse_arguments()
+    print(args)
     if not have_command_error(args.command):
         if args.command == 'init':
             execute_lgit_init()
@@ -342,9 +409,9 @@ def main():
             if check_empty_files(args.files, args.command):
                 execute_lgit_rm(args.files)
         elif args.command == 'config':
-            execute_lgit_config(args.files[0])
+            execute_lgit_config(args.author)
         elif args.command == 'commit':
-            execute_lgit_commit()
+            execute_lgit_commit(args.message)
         elif args.command == 'status':
             execute_lgit_status()
         elif args.command == 'ls-files':
