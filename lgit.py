@@ -17,7 +17,7 @@ def parse_arguments():
     parser.add_argument('command',
         help='specify which command to execute among ' +
         '[init|add|rm|config|commit|status|log|ls-files]')
-    parser.add_argument('files', nargs="*",
+    parser.add_argument('files', nargs='*',
         help='name of files to add content to the index')
     return parser.parse_args()
 
@@ -56,9 +56,9 @@ def have_command_error(command):
 
 def write_config():
     """Write LOGNAME to the config file."""
-    config_file = os.open('.lgit/config', os.O_WRONLY)
-    os.write(config_file, (os.environ['LOGNAME']).encode())
-    os.close(config_file)
+    config_file = open('.lgit/config', 'w+')
+    config_file.write(os.environ['LOGNAME'])
+    config_file.close()
 
 
 def init_lgit_dir():
@@ -210,7 +210,6 @@ def update_index_add(cryp, filename):
     @param filename: (str) The file name.
     """
     index_file = os.open('.lgit/index', os.O_RDWR)
-    print(filename, get_start_pos(filename))
     os.lseek(index_file, get_start_pos(filename), 0)
     os.write(index_file, str.encode('{} {} {} {} {}\n'.format(
         get_timestamp(filename),
@@ -316,6 +315,20 @@ def execute_lgit_rm(rm_list):
                 "' did not match any files")
 
 
+def execute_lgit_config(name):
+    """Write author name to the config file."""
+    config_file = open('.lgit/config', 'w+')
+    config_file.write(name + '\n')
+    config_file.close()
+
+
+def execute_lgit_lsfiles():
+    sub_list = get_sub_files_dir('.')
+    for file in sorted(get_dict_index_content().keys()):
+        if './' + file in sub_list:
+            print(file)
+
+
 def main():
     """Run the main program."""
     args = parse_arguments()
@@ -329,7 +342,7 @@ def main():
             if check_empty_files(args.files, args.command):
                 execute_lgit_rm(args.files)
         elif args.command == 'config':
-            execute_lgit_config()
+            execute_lgit_config(args.files[0])
         elif args.command == 'commit':
             execute_lgit_commit()
         elif args.command == 'status':
