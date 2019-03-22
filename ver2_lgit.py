@@ -309,7 +309,7 @@ def lgit_status():
     pass
 
 
-def print_commit_history(filename):
+def get_datetime(filename):
     dt = datetime(
         year=int(filename[0:4]),
         month=int(filename[4:6]),
@@ -317,12 +317,16 @@ def print_commit_history(filename):
         hour=int(filename[8:10]),
         minute=int(filename[10:12]),
         second=int(filename[12:14]))
+    return dt.strftime('%a %b %d %H:%M:%S %Y')
+
+
+def print_commit_history(filename):
     try:
         with open('.lgit/commits/' + filename, 'r') as file:
             content = file.read().split()
             print('commit ' + filename)
             print('Author: ' + content[0])
-            print('Date: ' + dt.strftime('%a %b %d %H:%M:%S %Y'))
+            print('Date: ' + get_datetime(filename))
             print('\n\t' + content[-1])
     except PermissionError:
         pass
