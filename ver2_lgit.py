@@ -64,9 +64,7 @@ def check_repo_exist():
 
 
 def print_repo_exist_error():
-    print(
-        'fatal: not a git repository ' +
-        '(or any of the parent directories)')
+    print('fatal: not a git repository (or any of the parent directories)')
     exit()
 
 
@@ -122,14 +120,13 @@ def get_all_files(dir):
     sub_files = []
     for root, _, files in walk(dir):
         for file in files:
-            sub_files.append(join(root, file))
+            if '.lgit/' not in join(root, file):
+                sub_files.append(join(root, file))
     return sub_files
 
 
 def print_pathspec_error(path):
-    print(
-        "fatal: pathspec '" + path +
-        "' did not match any files")
+    print("fatal: pathspec '" + path + "' did not match any files")
     exit()
 
 
@@ -138,7 +135,7 @@ def get_file_paths(paths):
         return sorted([file[2:] for file in get_all_files('.')])
     files = []
     for path in paths:
-        if isfile(path):
+        if isfile(path) and '.lgit/' not in path:
             files.append(path)
         elif isdir(path):
             files += get_all_files(path)
@@ -225,12 +222,11 @@ def lgit_add(paths):
     """Store a copy of the file content in the lgit database."""
     index = get_index_dict()
     for path in get_file_paths(paths):
-        if '.lgit/' not in path:
-            add_file(path, hash_sha1(path))
-            if path not in index.keys():
-                index[path] = create_info(path)
-            else:
-                change_info(index, path)
+        add_file(path, hash_sha1(path))
+        if path not in index.keys():
+            index[path] = create_info(path)
+        else:
+            change_info(index, path)
     update_index_file(index)
 
 
@@ -301,12 +297,75 @@ def lgit_commit(message):
     update_index_file(index)
 
 
+def print_on_branch():
+    print('On branch master\n')
+    if not listdir('.lgit/commits'):
+        print('No commits yet\n')
+
+
+def get_status_paths_list():
+    index = get_index_dict()
+    to_be_committed, not_staged_for_commit = [], []
+    for path, state in index.items():
+        index[path] = '{} {} {} {} {}\n'.format(
+            get_timestamp(path),
+            hash_sha1(path),
+            state[56:96],
+            state[97:137],
+            path)
+        if state[56:96] != state[97:137]:
+            to_be_committed.append(path)
+        if state[56:96] != hash_sha1(path):
+            not_staged_for_commit.append(path)
+    update_index_file(index)
+    return [to_be_committed, not_staged_for_commit]
+
+
+def print_to_be_committed(paths):
+    if paths:
+        print('Changes to be committed:')
+        print('  (use "./lgit.py reset HEAD ..." to unstage)')
+        print('\n\t modified: %s\n' % '\n\t modified: '.join(paths))
+
+
+def print_not_staged_for_commit(paths):
+    if paths:
+        print('Changes not staged for commit:')
+        print('  (use "./lgit.py add ..." to update what will be committed)')
+        print('  (use "./lgit.py checkout -- ..." '
+              'to discard changes in working directory)')
+        print('\n\t modified: %s\n' % '\n\t modified: '.join(paths))
+
+
+def get_untracked_files():
+    untracked_files = []
+    tracked_files = get_index_dict().keys()
+    for path in sorted([file[2:] for file in get_all_files('.')]):
+        if path not in tracked_files:
+            untracked_files.append(path)
+    return untracked_files
+
+
+def print_untracked_files(paths):
+    if paths:
+        print('Untracked files:')
+        print('  (use "./lgit.py add <file>..." '
+              'to include in what will be committed)')
+        print('\n\t%s\n' % '\n\t'.join(paths))
+        print('nothing added to commit but untracked files present '
+              '(use "./lgit.py add" to track)')
+
+
 def lgit_status():
     """
     Update the index with the content of the working directory.
     Display the status of tracked/untracked files.
     """
-    pass
+    print_on_branch()
+    paths_list = get_status_paths_list()
+    print_to_be_committed(paths_list[0])
+    print_not_staged_for_commit(paths_list[1])
+    print_untracked_files(get_untracked_files())
 
 
 def get_datetime(filename):
