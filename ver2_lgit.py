@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
-from os import getcwd, mkdir, environ, walk, unlink
+from os import getcwd, mkdir, environ, walk, unlink, listdir
 from os.path import exists, isdir, isfile, abspath, dirname, join, getmtime
 from hashlib import sha1
 from datetime import datetime
@@ -309,9 +309,32 @@ def lgit_status():
     pass
 
 
+def print_commit_history(filename):
+    dt = datetime(
+        year=int(filename[0:4]),
+        month=int(filename[4:6]),
+        day=int(filename[6:8]),
+        hour=int(filename[8:10]),
+        minute=int(filename[10:12]),
+        second=int(filename[12:14]))
+    try:
+        with open('.lgit/commits/' + filename, 'r') as file:
+            content = file.read().split()
+            print('commit ' + filename)
+            print('Author: ' + content[0])
+            print('Date: ' + dt.strftime('%a %b %d %H:%M:%S %Y'))
+            print('\n\t' + content[-1])
+    except PermissionError:
+        pass
+
+
 def lgit_log():
     """Show the commit history."""
-    pass
+    commit_files = sorted(listdir('.lgit/commits'), reverse=True)
+    for file in commit_files:
+        print_commit_history(file)
+        if file != commit_files[-1]:
+            print('\n')
 
 
 def lgit_ls_files():
@@ -319,12 +342,14 @@ def lgit_ls_files():
     List all the files currently tracked in the index,
     relative to the current directory.
     """
-    pass
+    all_files = [file[2:] for file in get_all_files('.')]
+    for path in sorted(get_index_dict().keys()):
+        if path in all_files:
+            print(path)
 
 
 def main():
     args = parse_arguments()
-    print(args)
     if args.command == 'init':
         lgit_init()
     elif check_repo_exist():
