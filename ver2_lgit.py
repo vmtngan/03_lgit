@@ -30,17 +30,10 @@ def parse_arguments():
     remove_parser.add_argument('files', nargs='+')
     # lgit config --author name
     config_parser = sub_parsers.add_parser('config')
-    config_parser.add_argument(
-        '--author',
-        nargs=1,
-        required=True)
+    config_parser.add_argument('--author', required=True)
     # lgit commit -m message
     commit_parser = sub_parsers.add_parser('commit')
-    commit_parser.add_argument(
-        '-m',
-        dest='message',
-        nargs=1,
-        required=True)
+    commit_parser.add_argument('-m', dest='message', required=True)
     # lgit status
     status_parser = sub_parsers.add_parser('status')
     # lgit log
@@ -201,12 +194,22 @@ def get_index_dict():
     return index
 
 
-def create_info(path, sha):
+def create_info(path):
     return '{} {} {} {} {}\n'.format(
         get_timestamp(path),
-        sha,
-        sha,
+        hash_sha1(path),
+        hash_sha1(path),
         ' '*40,
+        path)
+
+
+def change_info(index, path):
+    state = index[path]
+    index[path] = '{} {} {} {} {}\n'.format(
+        get_timestamp(path),
+        hash_sha1(path),
+        hash_sha1(path),
+        state[97:137],
         path)
 
 
@@ -224,7 +227,10 @@ def lgit_add(paths):
     for path in get_file_paths(paths):
         if '.lgit/' not in path:
             add_file(path, hash_sha1(path))
-            index[path] = create_info(path, hash_sha1(path))
+            if path not in index.keys():
+                index[path] = create_info(path)
+            else:
+                change_info(index, path)
     update_index_file(index)
 
 
@@ -273,7 +279,12 @@ def create_commit_file(message, tst_1, tst_2):
 
 def create_snap_file(index, tst_1):
     for path, state in index.items():
-        index[path] = state[:97] + state[56:97] + state[138:]
+        index[path] = '{} {} {} {} {}\n'.format(
+            get_timestamp(path),
+            hash_sha1(path),
+            state[56:96],
+            state[56:96],
+            path)
         with open('.lgit/snapshots/' + tst_1, 'a+') as file:
             file.write(state[56:96] + ' ' + path + '\n')
 
@@ -322,9 +333,9 @@ def main():
         elif args.command == 'rm':
             lgit_remove(args.files)
         elif args.command == 'config':
-            lgit_config(args.author[0])
+            lgit_config(args.author)
         elif args.command == 'commit':
-            lgit_commit(args.message[0])
+            lgit_commit(args.message)
         elif args.command == 'status':
             lgit_status()
         elif args.command == 'log':
