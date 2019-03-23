@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
 from os import getcwd, mkdir, environ, walk, unlink, listdir
-from os.path import exists, isdir, isfile, abspath, dirname, join, getmtime
+from os.path import exists, isdir, isfile, dirname, join, getmtime
 from hashlib import sha1
 from datetime import datetime
 from time import time
@@ -43,29 +43,26 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def print_gitfile_error(path):
-    print('fatal: invalid gitfile format: ' + path)
-    exit()
-
-
-def check_repo_isdir(path):
-    if isdir(path):
-        return True
-    elif isfile(path):
-        print_gitfile_error(path)
-    return False
-
-
-def check_repo_exist():
-    """Check the repository was initialize."""
-    if exists('.lgit'):
-        return check_repo_isdir(join(getcwd(), '.lgit'))
-    return check_repo_isdir(join(dirname(getcwd()), '.lgit'))
+def get_lgit_directory():
+    """Get the closest directory that has a .lgit directory in it."""
+    path = getcwd()
+    while path != '/':
+        if isdir(path + '/.lgit'):
+            return path
+        path = dirname(path)
+    return None
 
 
 def print_repo_exist_error():
     print('fatal: not a git repository (or any of the parent directories)')
     exit()
+
+
+def check_repo_exist():
+    """Check the repository was initialize."""
+    if get_lgit_directory():
+        return True
+    return False
 
 
 def create_dir(path):
@@ -86,7 +83,7 @@ def create_file(path):
 
 def write_logname_config():
     try:
-        file = open('.lgit/config', 'w+')
+        file = open(get_lgit_directory() + '/.lgit/config', 'w+')
         file.write(environ['LOGNAME'] + '\n')
         file.close()
     except PermissionError:
@@ -149,7 +146,7 @@ def hash_sha1(path):
     try:
         with open(path, 'r') as file:
             return sha1(file.read().encode()).hexdigest()
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         pass
 
 
@@ -157,7 +154,7 @@ def get_content(path):
     try:
         with open(path, 'r') as file:
             return file.read()
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         pass
 
 
@@ -170,8 +167,10 @@ def make_copy(src, dest):
 
 
 def add_file(path, sha):
-    create_dir('.lgit/objects/' + sha[:2])
-    make_copy(path, '.lgit/objects/' + sha[:2] + '/' + sha[2:])
+    create_dir(get_lgit_directory() + '/.lgit/objects/' + sha[:2])
+    make_copy(
+        path,
+        get_lgit_directory() + '/.lgit/objects/' + sha[:2] + '/' + sha[2:])
 
 
 def get_timestamp(path):
@@ -183,7 +182,7 @@ def get_timestamp(path):
 def get_index_dict():
     index = {}
     try:
-        with open('.lgit/index', 'r') as file:
+        with open(get_lgit_directory() + '/.lgit/index', 'r') as file:
             for line in file:
                 index[line[:-1].split()[-1]] = line
     except PermissionError:
@@ -196,7 +195,7 @@ def create_info(path):
         get_timestamp(path),
         hash_sha1(path),
         hash_sha1(path),
-        ' '*40,
+        ' ' * 40,
         path)
 
 
@@ -212,7 +211,7 @@ def change_info(index, path):
 
 def update_index_file(index):
     try:
-        with open('.lgit/index', 'w+') as file:
+        with open(get_lgit_directory() + '/.lgit/index', 'w+') as file:
             file.write(''.join(index.values()))
     except PermissionError:
         pass
@@ -252,7 +251,7 @@ def lgit_remove(paths):
 def lgit_config(author):
     """Set a user for authoring the commits."""
     try:
-        file = open('.lgit/config', 'w+')
+        file = open(get_lgit_directory() + '/.lgit/config', 'w+')
         file.write(author + '\n')
         file.close()
     except PermissionError:
@@ -260,15 +259,13 @@ def lgit_config(author):
 
 
 def create_commit_file(message, tst_1, tst_2):
-    author = get_content('.lgit/config').strip('\n')
+    author = get_content(get_lgit_directory() + '/.lgit/config').strip('\n')
     if not author:
         exit()
     try:
-        with open('.lgit/commits/' + tst_1, 'w+') as file:
-            file.write('{}\n{}\n\n{}\n'.format(
-                author,
-                tst_2,
-                message))
+        with open(get_lgit_directory() + '/.lgit/commits/' + tst_1,
+                  'w+') as file:
+            file.write('{}\n{}\n\n{}\n'.format(author, tst_2, message))
     except PermissionError:
         pass
 
@@ -281,7 +278,8 @@ def create_snap_file(index, tst_1):
             state[56:96],
             state[56:96],
             path)
-        with open('.lgit/snapshots/' + tst_1, 'a+') as file:
+        with open(get_lgit_directory() + '/.lgit/snapshots/' + tst_1,
+                  'a+') as file:
             file.write(state[56:96] + ' ' + path + '\n')
 
 
@@ -299,7 +297,7 @@ def lgit_commit(message):
 
 def print_on_branch():
     print('On branch master\n')
-    if not listdir('.lgit/commits'):
+    if not listdir(get_lgit_directory() + '/.lgit/commits'):
         print('No commits yet\n')
 
 
@@ -381,19 +379,21 @@ def get_datetime(filename):
 
 def print_commit_history(filename):
     try:
-        with open('.lgit/commits/' + filename, 'r') as file:
+        with open(get_lgit_directory() + '/.lgit/commits/' + filename,
+                  'r') as file:
             content = file.read().split()
             print('commit ' + filename)
             print('Author: ' + content[0])
             print('Date: ' + get_datetime(filename))
             print('\n\t' + content[-1])
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         pass
 
 
 def lgit_log():
     """Show the commit history."""
-    commit_files = sorted(listdir('.lgit/commits'), reverse=True)
+    commit_files = sorted(listdir(get_lgit_directory() + '/.lgit/commits'),
+                          reverse=True)
     for file in commit_files:
         print_commit_history(file)
         if file != commit_files[-1]:
@@ -405,10 +405,10 @@ def lgit_ls_files():
     List all the files currently tracked in the index,
     relative to the current directory.
     """
-    all_files = [file[2:] for file in get_all_files('.')]
-    for path in sorted(get_index_dict().keys()):
-        if path in all_files:
-            print(path)
+    for file in [file[2:] for file in get_all_files('.')]:
+        for path in get_index_dict().keys():
+            if path.endswith(file):
+                print(file)
 
 
 def main():
