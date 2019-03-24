@@ -58,13 +58,6 @@ def print_repo_exist_error():
     exit()
 
 
-def check_repo_exist():
-    """Check the repository was initialize."""
-    if get_lgit_directory():
-        return True
-    return False
-
-
 def create_dir(path):
     if not exists(path):
         try:
@@ -86,7 +79,7 @@ def write_logname_config():
         file = open(get_lgit_directory() + '/.lgit/config', 'w+')
         file.write(environ['LOGNAME'] + '\n')
         file.close()
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         pass
 
 
@@ -106,7 +99,7 @@ def create_repo():
 
 def lgit_init():
     """Initialize version control in the current directory."""
-    if check_repo_exist():
+    if get_lgit_directory():
         print('Git repository already initialized.')
     else:
         create_repo()
@@ -117,8 +110,9 @@ def get_all_files(dir):
     sub_files = []
     for root, _, files in walk(dir):
         for file in files:
-            if '.lgit/' not in join(root, file):
-                sub_files.append(join(root, file))
+            path = join(root, file)
+            if '.lgit/' not in path and 'lgit.py' not in path:
+                sub_files.append(path)
     return sub_files
 
 
@@ -162,7 +156,7 @@ def make_copy(src, dest):
     try:
         with open(dest, 'w+') as file:
             file.write(get_content(src))
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         pass
 
 
@@ -185,7 +179,7 @@ def get_index_dict():
         with open(get_lgit_directory() + '/.lgit/index', 'r') as file:
             for line in file:
                 index[line[:-1].split()[-1]] = line
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         pass
     return index
 
@@ -405,7 +399,7 @@ def lgit_ls_files():
     List all the files currently tracked in the index,
     relative to the current directory.
     """
-    for file in [file[2:] for file in get_all_files('.')]:
+    for file in sorted([file[2:] for file in get_all_files('.')]):
         for path in get_index_dict().keys():
             if path.endswith(file):
                 print(file)
@@ -415,7 +409,7 @@ def main():
     args = parse_arguments()
     if args.command == 'init':
         lgit_init()
-    elif check_repo_exist():
+    elif get_lgit_directory():
         if args.command == 'add':
             lgit_add(args.files)
         elif args.command == 'rm':
