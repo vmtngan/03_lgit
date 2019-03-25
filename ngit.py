@@ -58,6 +58,7 @@ def print_repo_exist_error():
 
 
 def create_dir(path):
+    """Create a directory."""
     if not exists(path):
         try:
             mkdir(path)
@@ -66,6 +67,7 @@ def create_dir(path):
 
 
 def create_file(path):
+    """Create a file."""
     try:
         with open(path, 'w+'):
             pass
@@ -74,6 +76,7 @@ def create_file(path):
 
 
 def write_logname_config():
+    """Write LOGNAME to config files"""
     try:
         file = open(get_lgit_directory() + '/.lgit/config', 'w+')
         file.write(environ['LOGNAME'] + '\n')
@@ -83,6 +86,7 @@ def write_logname_config():
 
 
 def create_repo():
+    """Create the .lgit repository."""
     dirs = ['.lgit',
             '.lgit/objects',
             '.lgit/commits',
@@ -105,6 +109,7 @@ def lgit_init():
 
 
 def get_index_dict():
+    """Return a index dictionary from index files."""
     index = {}
     try:
         with open(get_lgit_directory() + '/.lgit/index', 'r') as file:
@@ -116,6 +121,7 @@ def get_index_dict():
 
 
 def update_index_file(index):
+    """Rewrite the content to the index files."""
     try:
         with open(get_lgit_directory() + '/.lgit/index', 'w+') as file:
             file.write(''.join(index.values()))
@@ -135,6 +141,7 @@ def get_all_files(dir):
 
 
 def get_file_paths(paths):
+    """Get path from arguments."""
     if '.' in paths:
         return sorted(get_all_files('.'))
     files = []
@@ -159,6 +166,7 @@ def hash_sha1(path):
 
 
 def get_content(path):
+    """Get the content of file."""
     try:
         with open(path, 'r') as file:
             return file.read()
@@ -173,6 +181,7 @@ def get_timestamp(path):
 
 
 def make_copy(src, dest):
+    """Copy the content from source file to destination."""
     try:
         with open(dest, 'w+') as file:
             file.write(get_content(src))
@@ -181,6 +190,9 @@ def make_copy(src, dest):
 
 
 def add_file(path, sha):
+    """
+    Create a directory in objects directory and create a copy file in it.
+    """
     create_dir(get_lgit_directory() + '/.lgit/objects/' + sha[:2])
     make_copy(
         path,
@@ -188,6 +200,7 @@ def add_file(path, sha):
 
 
 def change_info(index, path, file):
+    """Change the content to add to the value of key in index dictionary."""
     state = index[file]
     index[file] = '{} {} {} {} {}\n'.format(
         get_timestamp(path),
@@ -198,6 +211,7 @@ def change_info(index, path, file):
 
 
 def create_info(path, key):
+    """Create the content to add to the value of key in index dictionary."""
     return '{} {} {} {} {}\n'.format(
         get_timestamp(path),
         hash_sha1(path),
@@ -222,6 +236,7 @@ def lgit_add(paths):
 
 
 def get_delete_key(index, path):
+    """Find the key of index dictionary to delete."""
     for file in index.keys():
         if path.endswith(file):
             return path.replace(get_lgit_directory() + '/', '')
@@ -232,11 +247,10 @@ def lgit_remove(paths):
     """Remove files from the working directory and the index."""
     index = get_index_dict()
     for path in paths:
-        if isfile(path):
-            key = get_delete_key(index, abspath(path))
-            if key:
-                unlink(path)
-                del index[key]
+        key = get_delete_key(index, abspath(path))
+        if isfile(path) and key:
+            unlink(path)
+            del index[key]
         elif isdir(path):
             print("fatal: not removing '" + path + "' recursively")
         else:
@@ -256,6 +270,10 @@ def lgit_config(author):
 
 
 def create_commit_file(message, tst_1, tst_2):
+    """
+    Check the config file is empty.
+    If not, create a file in commits directory and write the content to it.
+    """
     author = get_content(get_lgit_directory() + '/.lgit/config').strip('\n')
     if not author:
         exit()
@@ -268,6 +286,12 @@ def create_commit_file(message, tst_1, tst_2):
 
 
 def create_snap_file(index, tst_1):
+    """
+    Update the index file:
+    - first field (timestamp of the file in the working directory).
+    - second field (SHA1 of the content in the working directory).
+    - fourth field (SHA1 of the file content after you lgit commit).
+    """
     for path, state in index.items():
         index[path] = '{} {} {} {} {}\n'.format(
             get_timestamp(get_lgit_directory() + '/' + path),
@@ -299,6 +323,13 @@ def print_on_branch():
 
 
 def get_status_paths_list():
+    """
+    Update the index file:
+    - first field (timestamp of the file in the working directory).
+    - second field (SHA1 of the content in the working directory).
+    Check SHA1 of 3 stages to return a list to print status.
+    -
+    """
     index = get_index_dict()
     to_be_committed, not_staged_for_commit = [], []
     for path, state in index.items():
@@ -333,9 +364,10 @@ def print_not_staged_for_commit(paths):
 
 
 def get_untracked_files():
+    """Get list of untracked files in the working directory."""
     untracked_files = []
     tracked_files = get_index_dict().keys()
-    for path in get_all_files('.'):
+    for path in get_all_files(get_lgit_directory()):
         for file in tracked_files:
             if path.endswith(file):
                 break
@@ -368,6 +400,7 @@ def lgit_status():
 
 
 def get_datetime(filename):
+    """Get string of datetime from filename."""
     dt = datetime(
         year=int(filename[0:4]),
         month=int(filename[4:6]),
@@ -379,6 +412,7 @@ def get_datetime(filename):
 
 
 def print_commit_history(filename):
+    """Print each commit."""
     try:
         with open(get_lgit_directory() + '/.lgit/commits/' + filename,
                   'r') as file:
@@ -438,4 +472,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as error:
+        print(error)
